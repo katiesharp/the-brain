@@ -12,13 +12,15 @@ Rules:
 The goal is to take every ring off the bar, or with --reverse to put every
 ring on the bar starting from all off.
 
-With --brain it plays Mag-Nif's The Brain instead: 8 rods in a tower of
-discs, starting all in, with the goal of pulling every rod out. It follows
-the same rule, with "out" in place of "on" and "in" in place of "off".
+With --brain it plays Mag-Nif's The Brain instead, seen from above: a round
+dial with 8 flaps around its edge, starting all in, with the goal of pulling
+every flap out. It follows the same rule, with "out" in place of "on" and
+"in" in place of "off".
 """
 
 import argparse
 import curses
+import math
 
 MIN_RINGS = 1
 MAX_RINGS = 9  # so number keys 1-9 can reach every ring
@@ -65,7 +67,7 @@ def hint(state, goal):
     return (state ^ state_at(next_rank)).bit_length()
 
 
-# A set bit means the piece is "on" (a ring on the bar, a Brain rod pulled out).
+# A set bit means the piece is "on" (a ring on the bar, a Brain flap pulled out).
 THEMES = {
     "rings": {
         "title": "Chinese Rings",
@@ -82,14 +84,14 @@ THEMES = {
     },
     "brain": {
         "title": "The Brain",
-        "piece": "rod",
+        "piece": "flap",
         "on": "out",
         "off": "in",
-        "moved_on": "Pulled rod {} out.",
-        "moved_off": "Pushed rod {} in.",
+        "moved_on": "Pulled flap {} out.",
+        "moved_off": "Pushed flap {} in.",
         "must_be_on": "out",
-        "goal_on_text": "Pull every rod out.",
-        "goal_off_text": "Push every rod in.",
+        "goal_on_text": "Pull every flap out.",
+        "goal_off_text": "Push every flap in.",
         "default_count": 8,
         "default_goal_on": True,
     },
@@ -185,7 +187,7 @@ RING_COLORS_8 = [
 ]
 
 
-def draw(screen, game, ring_colors):
+def draw(screen, game, ring_colors, flap_extents=None):
     screen.erase()
     left = 2
     theme = game.theme
@@ -200,8 +202,10 @@ def draw(screen, game, ring_colors):
     screen.addstr(1, left, title, curses.A_BOLD)
     screen.addstr(2, left, stats)
 
-    draw_pieces = draw_brain if theme is THEMES["brain"] else draw_rings
-    next_row = draw_pieces(screen, game, ring_colors, left)
+    if theme is THEMES["brain"]:
+        next_row = draw_brain(screen, game, ring_colors, left, flap_extents or {})
+    else:
+        next_row = draw_rings(screen, game, ring_colors, left)
 
     screen.addstr(next_row + 1, left, game.message)
     for offset, line in enumerate(help_lines(theme)):
@@ -235,31 +239,75 @@ def draw_rings(screen, game, ring_colors, left):
     return 8
 
 
-def draw_brain(screen, game, ring_colors, left):
-    """Draw the disc tower and rods on rows 4-11; return the next free row.
+# The Brain's dial, seen from above. Terminal cells are about twice as tall
+# as they are wide, so x distances are doubled to keep the circle round.
+DIAL_RADIUS = 5
+DIAL_X_SCALE = 2.0
+DIAL_LABEL_RADIUS = 3.0
+FLAP_LENGTH = 1.2
+FLAP_TRAVEL = 2.0
+ANIMATION_FRAMES = 6
+ANIMATION_FRAME_MS = 35
 
-    A rod is a head (▲) on top of two body segments. Pushed in, the head
-    sits on the tower's top edge (row 6). Pulled out, it rises two rows.
+
+def dial_cell(center_row, center_col, radius, angle):
+    row = center_row + round(radius * math.sin(angle))
+    col = center_col + round(radius * math.cos(angle) * DIAL_X_SCALE)
+    return row, col
+
+
+def draw_brain(screen, game, ring_colors, left, flap_extents):
+    """Draw the dial and its flaps on rows 3-17; return the next free row.
+
+    Flap 1 is at 12 o'clock and the rest follow clockwise. A flap's
+    extent runs from 0 (pushed in, sitting across the rim) to 1 (pulled out
+    past the rim); flap_extents overrides it for flaps being animated.
     """
-    top, bottom = 6, 9
-    right = left + 1 + game.ring_count * COLUMN_WIDTH
-    screen.addstr(top, left, "╔" + "═" * (right - left - 1) + "╗")
-    for row in range(top + 1, bottom):
-        # The rotating discs, seen edge-on
-        screen.addstr(row, left, "║" + "─" * (right - left - 1) + "║", curses.A_DIM)
-    screen.addstr(bottom, left, "╚" + "═" * (right - left - 1) + "╝")
+    center_row = 10
+    center_col = left + round((DIAL_RADIUS + FLAP_TRAVEL + 1) * DIAL_X_SCALE)
 
-    for column, rod in enumerate(range(1, game.ring_count + 1)):
-        x = left + 1 + column * COLUMN_WIDTH + COLUMN_WIDTH // 2
-        color = ring_colors[(rod - 1) % len(ring_colors)] | curses.A_BOLD
-        head = top - 2 if (game.state >> (rod - 1)) & 1 else top
-        screen.addstr(head, x, "▲", color)
-        screen.addstr(head + 1, x, "█", color)
-        screen.addstr(head + 2, x, "█", color)
-        screen.addstr(bottom + 1, x - 2, f"{rod:^{COLUMN_WIDTH}}", color)
+    for degrees in range(0, 360, 2):
+        row, col = dial_cell(center_row, center_col, DIAL_RADIUS, math.radians(degrees))
+        screen.addstr(row, col, "·", curses.A_DIM)
 
-    draw_cursor(screen, game, bottom + 2, lambda rod: left + 1 + (rod - 1) * COLUMN_WIDTH)
-    return bottom + 3
+    for flap in range(1, game.ring_count + 1):
+        angle = math.radians(-90 + (flap - 1) * 360 / game.ring_count)
+        color = ring_colors[(flap - 1) % len(ring_colors)] | curses.A_BOLD
+        extent = flap_extents.get(flap, (game.state >> (flap - 1)) & 1)
+        inner = DIAL_RADIUS - FLAP_LENGTH + FLAP_TRAVEL * extent
+
+        # Sample along the flap finely so it has no gaps at any angle
+        radius = inner
+        while radius <= inner + FLAP_LENGTH:
+            row, col = dial_cell(center_row, center_col, radius, angle)
+            screen.addstr(row, col, "█", color)
+            if abs(math.cos(angle)) < 0.3:
+                # Up/down flaps are two cells wide to look as thick as the others
+                screen.addstr(row, col + 1, "█", color)
+            radius += 0.1
+
+        row, col = dial_cell(center_row, center_col, DIAL_LABEL_RADIUS, angle)
+        label_attr = color | curses.A_REVERSE if flap == game.cursor else color
+        screen.addstr(row, col, str(flap), label_attr)
+
+    return center_row + 8
+
+
+def animate_flap(screen, game, ring_colors, flap):
+    start = (game.state >> (flap - 1)) & 1
+    for frame in range(1, ANIMATION_FRAMES):
+        extent = start + (1 - 2 * start) * frame / ANIMATION_FRAMES
+        try:
+            draw(screen, game, ring_colors, {flap: extent})
+        except curses.error:
+            return
+        curses.napms(ANIMATION_FRAME_MS)
+
+
+def move(screen, game, ring_colors):
+    if game.theme is THEMES["brain"] and can_toggle(game.state, game.cursor):
+        animate_flap(screen, game, ring_colors, game.cursor)
+    game.move(game.cursor)
 
 
 def run(screen, ring_count, goal_on, theme):
@@ -290,10 +338,10 @@ def run(screen, ring_count, goal_on, theme):
         elif key in (curses.KEY_RIGHT, ord("d")):
             game.cursor = min(game.cursor + 1, game.ring_count)
         elif key in (ord(" "), ord("\n"), curses.KEY_ENTER):
-            game.move(game.cursor)
+            move(screen, game, ring_colors)
         elif ord("1") <= key <= ord("9") and key - ord("0") <= game.ring_count:
             game.cursor = key - ord("0")
-            game.move(game.cursor)
+            move(screen, game, ring_colors)
         elif key == ord("h"):
             game.show_hint()
         elif key == ord("u"):
@@ -316,18 +364,18 @@ def main():
         "rings",
         nargs="?",
         type=int,
-        help=f"number of rings or rods ({MIN_RINGS}-{MAX_RINGS}, default 5 rings or 8 rods)",
+        help=f"number of rings or flaps ({MIN_RINGS}-{MAX_RINGS}, default 5 rings or 8 flaps)",
     )
     parser.add_argument(
         "--brain",
         action="store_true",
-        help="play The Brain: pull all 8 rods out of the disc tower",
+        help="play The Brain: pull all 8 flaps out of the dial",
     )
     parser.add_argument(
         "--reverse",
         "--on",
         action="store_true",
-        help="play the other way: put every ring on, or push every Brain rod in",
+        help="play the other way: put every ring on, or push every Brain flap in",
     )
     args = parser.parse_args()
     theme = THEMES["brain"] if args.brain else THEMES["rings"]
