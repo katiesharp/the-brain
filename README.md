@@ -1,48 +1,41 @@
 # The Brain
 
-Mag-Nif's The Brain and the Chinese rings puzzle (Baguenaudier) in your terminal. Python 3 standard library only, no install needed.
+Mag-Nif's The Brain puzzle in your terminal. Python 3 standard library only, no install needed.
+
+Play it without downloading anything:
 
 ```bash
-python3 rings.py                # The Brain: pull all 8 flaps out (170 moves)
-python3 rings.py --reverse      # The Brain backwards: push all 8 flaps in
-python3 rings.py --rings        # Chinese rings, 5 rings
-python3 rings.py --rings 9      # the classic nine rings (341 moves)
+python3 <(curl -s https://raw.githubusercontent.com/katiesharp/the-brain/main/brain.py)
 ```
 
-Run it without cloning (add `--rings` or any other option at the end):
+Add options at the end of that command, or run a local copy:
 
 ```bash
-python3 <(gh api -H "Accept: application/vnd.github.raw" repos/katiesharp/the-brain/contents/rings.py)
+python3 brain.py              # 8 flaps, pull them all out (170 moves)
+python3 brain.py --reverse    # start with every flap out, push them all in (or press ↓ in game)
+python3 brain.py 5            # fewer flaps (1-9)
 ```
 
 ## Rules
 
-With `--rings`, take every ring off the bar, or with `--rings --reverse` (or `m` in game) put every ring on starting from all off. Rings are numbered from the free end (ring 1 is on the left).
-
-- Ring 1 can always be moved on or off.
-- Any other ring can move only when the ring just to its left is on the bar and every ring further left is off.
-
-Press a ring's number to move it. Each ring has its own color.
-
-## The Brain
-
-Mag-Nif's The Brain (1970s) is a round stack of 8 transparent rotating discs with 8 flaps around the edge. The game shows it from above, with flap 1 at 12 o'clock and the rest clockwise. Every flap starts pushed in, and the goal is to pull them all out; pressing a flap's number slides it in or out. Under the discs it's the same puzzle as the Chinese rings, with "out" for "on" and "in" for "off":
+Mag-Nif's The Brain (1970s) is a round stack of transparent rotating discs with 8 flaps around the edge. The game shows it from above, with flap 1 at 12 o'clock and the rest clockwise. Every flap starts pushed in, and the goal is to pull them all out. Pressing a flap's number slides it in or out.
 
 - Flap 1 can always be pulled out or pushed in.
 - Any other flap can move only when the flap numbered just before it is out and every lower-numbered flap is in.
 
-This is the default game. `--reverse` (or `m` in game) starts with every flap out and the goal of pushing them all in.
+Each flap has its own color.
 
 ## Keys
 
 | Key | Action |
 |---|---|
-| ← / → | select a ring or flap |
-| space / enter | move the selected ring |
-| 1–9 | move that ring |
+| 1–9 | move that flap |
+| ← / → | select a flap |
+| space / enter | move the selected flap |
 | h | hint (next move on the shortest path) |
 | u | undo |
 | r | restart |
-| + / - | more / fewer rings |
-| m | switch goal (rings: off ↔ on, Brain: out ↔ in) |
+| + / - | more / fewer flaps |
+| ↑ | new game: start with every flap in, pull them all out |
+| ↓ | new game: start with every flap out, push them all in |
 | q | quit |
