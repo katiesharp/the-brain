@@ -9,8 +9,12 @@ Rules:
   - Ring k > 1 can be moved only when ring k-1 is on the bar
     and every ring below k-1 is off.
 
-The goal is to take every ring off the bar, or with --on to put every
+The goal is to take every ring off the bar, or with --reverse to put every
 ring on the bar starting from all off.
+
+With --brain it plays Mag-Nif's The Brain instead: 8 rods in a tower of
+discs, starting all in, with the goal of pulling every rod out. It follows
+the same rule, with "out" in place of "on" and "in" in place of "off".
 """
 
 import argparse
@@ -61,16 +65,49 @@ def hint(state, goal):
     return (state ^ state_at(next_rank)).bit_length()
 
 
-def blocked_reason(state, ring):
+# A set bit means the piece is "on" (a ring on the bar, a Brain rod pulled out).
+THEMES = {
+    "rings": {
+        "title": "Chinese Rings",
+        "piece": "ring",
+        "on": "on",
+        "off": "off",
+        "moved_on": "Moved ring {} on.",
+        "moved_off": "Moved ring {} off.",
+        "must_be_on": "on the bar",
+        "goal_on_text": "Put every ring on the bar.",
+        "goal_off_text": "Take every ring off the bar.",
+        "default_count": 5,
+        "default_goal_on": False,
+    },
+    "brain": {
+        "title": "The Brain",
+        "piece": "rod",
+        "on": "out",
+        "off": "in",
+        "moved_on": "Pulled rod {} out.",
+        "moved_off": "Pushed rod {} in.",
+        "must_be_on": "out",
+        "goal_on_text": "Pull every rod out.",
+        "goal_off_text": "Push every rod in.",
+        "default_count": 8,
+        "default_goal_on": True,
+    },
+}
+
+
+def blocked_reason(state, ring, theme):
+    piece = theme["piece"]
     if not (state >> (ring - 2)) & 1:
-        return f"Ring {ring} is stuck: ring {ring - 1} must be on the bar."
-    return f"Ring {ring} is stuck: every ring below {ring - 1} must be off."
+        return f"{piece.capitalize()} {ring} is stuck: {piece} {ring - 1} must be {theme['must_be_on']}."
+    return f"{piece.capitalize()} {ring} is stuck: every {piece} below {ring - 1} must be {theme['off']}."
 
 
 class Game:
-    def __init__(self, ring_count, goal_on=False):
+    def __init__(self, ring_count, goal_on=False, theme=THEMES["rings"]):
         self.ring_count = ring_count
         self.goal_on = goal_on
+        self.theme = theme
         self.reset()
 
     @property
@@ -87,7 +124,7 @@ class Game:
 
     @property
     def objective(self):
-        return "Put every ring on the bar." if self.goal_on else "Take every ring off the bar."
+        return self.theme["goal_on_text"] if self.goal_on else self.theme["goal_off_text"]
 
     @property
     def best_total(self):
@@ -101,12 +138,12 @@ class Game:
 
     def move(self, ring):
         if not can_toggle(self.state, ring):
-            self.message = blocked_reason(self.state, ring)
+            self.message = blocked_reason(self.state, ring, self.theme)
             return
         self.history.append(self.state)
         self.state = toggle(self.state, ring)
-        direction = "on" if (self.state >> (ring - 1)) & 1 else "off"
-        self.message = f"Moved ring {ring} {direction}."
+        moved = "moved_on" if (self.state >> (ring - 1)) & 1 else "moved_off"
+        self.message = self.theme[moved].format(ring)
         if self.state == self.goal:
             moves = len(self.history)
             if moves == self.best_total:
@@ -126,13 +163,14 @@ class Game:
         if ring is None:
             self.message = "Already solved."
         else:
-            self.message = f"Hint: move ring {ring}."
+            self.message = f"Hint: move {self.theme['piece']} {ring}."
 
 
-HELP_LINES = [
-    "1-9 move that ring   ←/→ select   space move   h hint   u undo",
-    "r restart   +/- rings   m switch goal (on/off)   q quit",
-]
+def help_lines(theme):
+    return [
+        f"1-9 move that {theme['piece']}   ←/→ select   space move   h hint   u undo",
+        f"r restart   +/- {theme['piece']}s   m switch goal ({theme['on']}/{theme['off']})   q quit",
+    ]
 
 # One color per ring: red, orange, yellow, green, cyan, blue, purple, pink, tan.
 RING_COLORS_256 = [196, 208, 226, 46, 51, 33, 129, 201, 180]
@@ -150,9 +188,10 @@ RING_COLORS_8 = [
 def draw(screen, game, ring_colors):
     screen.erase()
     left = 2
+    theme = game.theme
 
-    goal_word = "on" if game.goal_on else "off"
-    title = f"Chinese Rings · {game.ring_count} rings · goal: all {goal_word}"
+    goal_word = theme["on"] if game.goal_on else theme["off"]
+    title = f"{theme['title']} · {game.ring_count} {theme['piece']}s · goal: all {goal_word}"
     stats = (
         f"moves: {len(game.history)}   "
         f"optimal from here: {moves_left(game.state, game.goal)}   "
@@ -161,6 +200,22 @@ def draw(screen, game, ring_colors):
     screen.addstr(1, left, title, curses.A_BOLD)
     screen.addstr(2, left, stats)
 
+    draw_pieces = draw_brain if theme is THEMES["brain"] else draw_rings
+    next_row = draw_pieces(screen, game, ring_colors, left)
+
+    screen.addstr(next_row + 1, left, game.message)
+    for offset, line in enumerate(help_lines(theme)):
+        screen.addstr(next_row + 3 + offset, left, line, curses.A_DIM)
+    screen.refresh()
+
+
+def draw_cursor(screen, game, row, column_x):
+    x = column_x(game.cursor)
+    screen.addstr(row, x, f"{'^':^{COLUMN_WIDTH}}", curses.A_BOLD)
+
+
+def draw_rings(screen, game, ring_colors, left):
+    """Draw the bar and rings on rows 4-7; return the next free row."""
     screen.addstr(5, left, "◀═")
     for column, ring in enumerate(range(1, game.ring_count + 1)):
         x = left + 2 + column * COLUMN_WIDTH
@@ -176,16 +231,38 @@ def draw(screen, game, ring_colors):
             screen.addstr(5, x, "═════")
             screen.addstr(6, x + 1, "(O)", color)
 
-        if ring == game.cursor:
-            screen.addstr(7, x, f"{'^':^{COLUMN_WIDTH}}", curses.A_BOLD)
-
-    screen.addstr(9, left, game.message)
-    for offset, line in enumerate(HELP_LINES):
-        screen.addstr(11 + offset, left, line, curses.A_DIM)
-    screen.refresh()
+    draw_cursor(screen, game, 7, lambda ring: left + 2 + (ring - 1) * COLUMN_WIDTH)
+    return 8
 
 
-def run(screen, ring_count, goal_on):
+def draw_brain(screen, game, ring_colors, left):
+    """Draw the disc tower and rods on rows 4-11; return the next free row.
+
+    A rod is a head (▲) on top of two body segments. Pushed in, the head
+    sits on the tower's top edge (row 6). Pulled out, it rises two rows.
+    """
+    top, bottom = 6, 9
+    right = left + 1 + game.ring_count * COLUMN_WIDTH
+    screen.addstr(top, left, "╔" + "═" * (right - left - 1) + "╗")
+    for row in range(top + 1, bottom):
+        # The rotating discs, seen edge-on
+        screen.addstr(row, left, "║" + "─" * (right - left - 1) + "║", curses.A_DIM)
+    screen.addstr(bottom, left, "╚" + "═" * (right - left - 1) + "╝")
+
+    for column, rod in enumerate(range(1, game.ring_count + 1)):
+        x = left + 1 + column * COLUMN_WIDTH + COLUMN_WIDTH // 2
+        color = ring_colors[(rod - 1) % len(ring_colors)] | curses.A_BOLD
+        head = top - 2 if (game.state >> (rod - 1)) & 1 else top
+        screen.addstr(head, x, "▲", color)
+        screen.addstr(head + 1, x, "█", color)
+        screen.addstr(head + 2, x, "█", color)
+        screen.addstr(bottom + 1, x - 2, f"{rod:^{COLUMN_WIDTH}}", color)
+
+    draw_cursor(screen, game, bottom + 2, lambda rod: left + 1 + (rod - 1) * COLUMN_WIDTH)
+    return bottom + 3
+
+
+def run(screen, ring_count, goal_on, theme):
     curses.curs_set(0)
     ring_colors = [0]
     if curses.has_colors():
@@ -196,7 +273,7 @@ def run(screen, ring_count, goal_on):
             curses.init_pair(pair, color, -1)
         ring_colors = [curses.color_pair(pair) for pair in range(1, len(palette) + 1)]
 
-    game = Game(ring_count, goal_on)
+    game = Game(ring_count, goal_on, theme)
     while True:
         try:
             draw(screen, game, ring_colors)
@@ -224,31 +301,41 @@ def run(screen, ring_count, goal_on):
         elif key == ord("r"):
             game.reset()
         elif key == ord("m"):
-            game = Game(game.ring_count, not game.goal_on)
+            game = Game(game.ring_count, not game.goal_on, theme)
         elif key in (ord("+"), ord("=")) and game.ring_count < MAX_RINGS:
-            game = Game(game.ring_count + 1, game.goal_on)
+            game = Game(game.ring_count + 1, game.goal_on, theme)
         elif key in (ord("-"), ord("_")) and game.ring_count > MIN_RINGS:
-            game = Game(game.ring_count - 1, game.goal_on)
+            game = Game(game.ring_count - 1, game.goal_on, theme)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Play the Chinese rings puzzle.")
+    parser = argparse.ArgumentParser(
+        description="Play the Chinese rings puzzle, or Mag-Nif's The Brain with --brain."
+    )
     parser.add_argument(
         "rings",
         nargs="?",
         type=int,
-        default=5,
-        help=f"number of rings ({MIN_RINGS}-{MAX_RINGS}, default 5)",
+        help=f"number of rings or rods ({MIN_RINGS}-{MAX_RINGS}, default 5 rings or 8 rods)",
     )
     parser.add_argument(
+        "--brain",
+        action="store_true",
+        help="play The Brain: pull all 8 rods out of the disc tower",
+    )
+    parser.add_argument(
+        "--reverse",
         "--on",
         action="store_true",
-        help="start with every ring off and put them all on",
+        help="play the other way: put every ring on, or push every Brain rod in",
     )
     args = parser.parse_args()
-    if not MIN_RINGS <= args.rings <= MAX_RINGS:
-        parser.error(f"rings must be between {MIN_RINGS} and {MAX_RINGS}")
-    curses.wrapper(run, args.rings, args.on)
+    theme = THEMES["brain"] if args.brain else THEMES["rings"]
+    ring_count = theme["default_count"] if args.rings is None else args.rings
+    if not MIN_RINGS <= ring_count <= MAX_RINGS:
+        parser.error(f"count must be between {MIN_RINGS} and {MAX_RINGS}")
+    goal_on = theme["default_goal_on"] != args.reverse
+    curses.wrapper(run, ring_count, goal_on, theme)
 
 
 if __name__ == "__main__":
