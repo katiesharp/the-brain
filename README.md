@@ -1,4 +1,4 @@
-# Chinese Rings
+# The Brain
 
 Mag-Nif's The Brain and the Chinese rings puzzle (Baguenaudier) in your terminal. Python 3 standard library only, no install needed.
 
@@ -12,7 +12,7 @@ python3 rings.py --rings 9      # the classic nine rings (341 moves)
 Run it without cloning (add `--rings` or any other option at the end):
 
 ```bash
-python3 <(gh api -H "Accept: application/vnd.github.raw" repos/katiesharp/chinese-rings/contents/rings.py)
+python3 <(gh api -H "Accept: application/vnd.github.raw" repos/katiesharp/the-brain/contents/rings.py)
 ```
 
 ## Rules
