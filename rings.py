@@ -9,13 +9,13 @@ Rules:
   - Ring k > 1 can be moved only when ring k-1 is on the bar
     and every ring below k-1 is off.
 
-The goal is to take every ring off the bar, or with --reverse to put every
-ring on the bar starting from all off.
+By default it plays Mag-Nif's The Brain, seen from above: a round dial with
+8 flaps around its edge, starting all in, with the goal of pulling every flap
+out. It follows the same rule, with "out" in place of "on" and "in" in place
+of "off".
 
-With --brain it plays Mag-Nif's The Brain instead, seen from above: a round
-dial with 8 flaps around its edge, starting all in, with the goal of pulling
-every flap out. It follows the same rule, with "out" in place of "on" and
-"in" in place of "off".
+With --rings it plays the Chinese rings: take every ring off the bar.
+Either game takes --reverse to play toward the opposite goal.
 """
 
 import argparse
@@ -358,27 +358,30 @@ def run(screen, ring_count, goal_on, theme):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Play the Chinese rings puzzle, or Mag-Nif's The Brain with --brain."
+        description="Play Mag-Nif's The Brain, or the Chinese rings puzzle with --rings."
     )
     parser.add_argument(
         "rings",
         nargs="?",
         type=int,
-        help=f"number of rings or flaps ({MIN_RINGS}-{MAX_RINGS}, default 5 rings or 8 flaps)",
+        help=f"number of flaps or rings ({MIN_RINGS}-{MAX_RINGS}, default 8 flaps or 5 rings)",
     )
     parser.add_argument(
-        "--brain",
+        "--rings",
+        dest="classic_rings",
         action="store_true",
-        help="play The Brain: pull all 8 flaps out of the dial",
+        help="play the Chinese rings instead of The Brain",
     )
+    # The Brain used to need --brain; keep accepting it now that it's the default
+    parser.add_argument("--brain", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--reverse",
         "--on",
         action="store_true",
-        help="play the other way: put every ring on, or push every Brain flap in",
+        help="play the other way: push every Brain flap in, or put every ring on",
     )
     args = parser.parse_args()
-    theme = THEMES["brain"] if args.brain else THEMES["rings"]
+    theme = THEMES["rings"] if args.classic_rings else THEMES["brain"]
     ring_count = theme["default_count"] if args.rings is None else args.rings
     if not MIN_RINGS <= ring_count <= MAX_RINGS:
         parser.error(f"count must be between {MIN_RINGS} and {MAX_RINGS}")

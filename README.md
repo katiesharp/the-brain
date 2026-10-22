@@ -1,15 +1,15 @@
 # Chinese Rings
 
-The Chinese rings puzzle (Baguenaudier) and Mag-Nif's The Brain in your terminal. Python 3 standard library only, no install needed.
+Mag-Nif's The Brain and the Chinese rings puzzle (Baguenaudier) in your terminal. Python 3 standard library only, no install needed.
 
 ```bash
-python3 rings.py             # 5 rings
-python3 rings.py 9           # the classic nine rings (341 moves)
-python3 rings.py --reverse   # start with rings off, put them all on
-python3 rings.py --brain     # The Brain: pull all 8 flaps out (170 moves)
+python3 rings.py                # The Brain: pull all 8 flaps out (170 moves)
+python3 rings.py --reverse      # The Brain backwards: push all 8 flaps in
+python3 rings.py --rings        # Chinese rings, 5 rings
+python3 rings.py --rings 9      # the classic nine rings (341 moves)
 ```
 
-Run it without cloning (add `--brain` or any other option at the end):
+Run it without cloning (add `--rings` or any other option at the end):
 
 ```bash
 python3 <(gh api -H "Accept: application/vnd.github.raw" repos/katiesharp/chinese-rings/contents/rings.py)
@@ -17,7 +17,7 @@ python3 <(gh api -H "Accept: application/vnd.github.raw" repos/katiesharp/chines
 
 ## Rules
 
-Take every ring off the bar, or with `--reverse` (or `m` in game) put every ring on starting from all off. Rings are numbered from the free end (ring 1 is on the left).
+With `--rings`, take every ring off the bar, or with `--rings --reverse` (or `m` in game) put every ring on starting from all off. Rings are numbered from the free end (ring 1 is on the left).
 
 - Ring 1 can always be moved on or off.
 - Any other ring can move only when the ring just to its left is on the bar and every ring further left is off.
@@ -31,7 +31,7 @@ Mag-Nif's The Brain (1970s) is a round stack of 8 transparent rotating discs wit
 - Flap 1 can always be pulled out or pushed in.
 - Any other flap can move only when the flap numbered just before it is out and every lower-numbered flap is in.
 
-`--brain --reverse` (or `m` in game) starts with every flap out and the goal of pushing them all in.
+This is the default game. `--reverse` (or `m` in game) starts with every flap out and the goal of pushing them all in.
 
 ## Keys
 
